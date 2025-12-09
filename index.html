@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>英语词组发音助手</title>
+    <!-- 
+      【打包 APK 重要提示】
+      为了确保 APP 在离线状态下也能打开（虽然在线发音需要网），
+      请下载 xlsx.full.min.js 并放在与 index.html 同级目录，
+      然后将下行代码改为： <script src="xlsx.full.min.js"></script>
+    -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --loading-color: #FFC107;
+            --bg-color: #f4f4f9;
+            --item-bg: #ffffff;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+            color: var(--text-color);
+            user-select: none; 
+            -webkit-user-select: none;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 顶部操作区 */
+        .header {
+            background-color: #fff;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn-import {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px;
+            flex: 2;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-test {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px;
+            flex: 1;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .btn-reset {
+            background-color: #FF9800;
+            color: white;
+            border: none;
+            padding: 0 15px;
+            border-radius: 8px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        #fileInput { display: none; }
+
+        /* 搜索框 */
+        .search-box {
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 15px;
+            padding-left: 35px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+        }
+
+        /* 列表区域 */
+        .list-container {
+            padding: 10px;
+            padding-bottom: 50px;
+            min-height: 60vh;
+        }
+
+        .word-item {
+            background: var(--item-bg);
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-left: 5px solid transparent;
+        }
+
+        .word-item:active {
+            background-color: #e8f5e9;
+        }
+
+        /* 正在播放的状态 */
+        .word-item.playing {
+            border-left: 5px solid var(--primary-color);
+            background-color: #e8f5e9;
+        }
+
+        /* 网络请求加载中的状态 */
+        .word-item.loading {
+            border-left: 5px solid var(--loading-color);
+            background-color: #fff8e1;
+        }
+
+        .en-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 4px;
+        }
+
+        .cn-text {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* 底部状态栏 */
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #333;
+            color: #fff;
+            padding: 8px 15px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-sizing: border-box;
+            z-index: 200;
+        }
+        
+        #statusBarText {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 70%;
+        }
+
+        .empty-state {
+            text-align: center;
+            margin-top: 50px;
+            color: #999;
+        }
+
+        .loader {
+            display: none;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .error-banner {
+            background-color: #ff5252;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .online-mode-badge {
+            background-color: #2196F3;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="errorBanner" class="error-banner"></div>
+
+    <div class="header">
+        <div class="btn-group">
+            <button class="btn-import" onclick="document.getElementById('fileInput').click()">
+                📂 导入 Excel
+            </button>
+            <button class="btn-test" onclick="testAudio()">
+                🔊 测试
+            </button>
+            <button class="btn-reset" onclick="forceReset()" title="重置">
+                🔄
+            </button>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" onchange="handleFile(this)">
+        
+        <div class="loader" id="loader"></div>
+
+        <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" id="searchInput" placeholder="搜索..." onkeyup="filterList()">
+        </div>
+    </div>
+
+    <div class="list-container" id="listContainer">
+        <div class="empty-state">
+            <p>👋 欢迎使用</p>
+            <p>正在初始化...</p>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="statusBarText">准备就绪</span>
+        <span id="onlineBadge" class="online-mode-badge">在线发音模式</span>
+    </div>
+
+    <script>
+        // ================= 全局状态 =================
+        let fullDataList = [];
+        let currentPlayToken = 0; // 用于解决并发播放问题
+        let useOnlineTTS = false; // 是否强制使用在线模式
+        
+        // 全局单一音频对象，复用它以减少内存消耗
+        const globalAudio = new Audio();
+
+        // ================= 初始化 =================
+        window.onload = function() {
+            // 1. 检查 XLSX 库
+            if (typeof XLSX === 'undefined') {
+                showError("⚠️ 无法加载 Excel 解析库。如果您正在使用 APK，请确保已下载 xlsx.full.min.js 到本地，或连接网络。");
+            }
+
+            // 2. 检测本地 TTS 支持
+            if (!('speechSynthesis' in window)) {
+                useOnlineTTS = true;
+                showOnlineBadge();
+                setStatus("内核不支持本地TTS，使用网络发音");
+            }
+
+            // 3. 数据库初始化
+            initDB().then(loadFromDB).catch(() => {
+                renderEmptyState();
+                setStatus("无法读取历史记录");
+            });
+            
+            // 4. 音频引擎预热 (解决移动端首字吞音/不播放问题)
+            const warmUpAudio = () => {
+                // 唤醒 Web Speech API
+                if(window.speechSynthesis && window.speechSynthesis.paused) {
+                    window.speechSynthesis.resume();
+                }
+                // 唤醒 HTML5 Audio (播放一个极短的静音片段)
+                // 某些WebView需要用户交互后才能播放任何声音
+                globalAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAGZGF0YQQAAAAAAA==';
+                globalAudio.play().catch(() => {});
+                
+                document.body.removeEventListener('click', warmUpAudio);
+            };
+            document.body.addEventListener('click', warmUpAudio);
+        };
+
+        function showError(msg) {
+            const banner = document.getElementById('errorBanner');
+            banner.textContent = msg;
+            banner.style.display = 'block';
+        }
+        
+        function showOnlineBadge() {
+            document.getElementById('onlineBadge').style.display = 'inline-block';
+        }
+        
+        function setStatus(msg) {
+            document.getElementById('statusBarText').textContent = msg;
+        }
+
+        // ================= 数据库 (IndexedDB) =================
+        const DB_CONFIG = { name: 'EnglishAppDB', version: 1, storeName: 'excelData' };
+        
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                if (!window.indexedDB) return reject();
+                const req = indexedDB.open(DB_CONFIG.name, DB_CONFIG.version);
+                req.onerror = reject;
+                req.onupgradeneeded = e => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(DB_CONFIG.storeName)) db.createObjectStore(DB_CONFIG.storeName);
+                };
+                req.onsuccess = e => resolve(e.target.result);
+            });
+        }
+
+        async function saveToDB(data) {
+            try {
+                const db = await initDB();
+                const tx = db.transaction([DB_CONFIG.storeName], 'readwrite');
+                tx.objectStore(DB_CONFIG.storeName).put(data, 'latestList');
+            } catch(e) {}
+        }
+
+        async function loadFromDB() {
+            try {
+                const db = await initDB();
+                const tx = db.transaction([DB_CONFIG.storeName], 'readonly');
+                const req = tx.objectStore(DB_CONFIG.storeName).get('latestList');
+                req.onsuccess = e => {
+                    const data = e.target.result;
+                    if (data && data.length) {
+                        fullDataList = data;
+                        renderList(fullDataList);
+                        setStatus(`✅ 已恢复记录 (${fullDataList.length})`);
+                    } else renderEmptyState();
+                };
+                req.onerror = renderEmptyState;
+            } catch(e) { renderEmptyState(); }
+        }
+
+        // ================= 文件处理 =================
+        function handleFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            if (typeof XLSX === 'undefined') {
+                showError("缺少 XLSX 库，无法解析文件。");
+                input.value = '';
+                return;
+            }
+
+            document.getElementById('loader').style.display = 'block';
+            setStatus("正在读取文件...");
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ''});
+                    
+                    fullDataList = [];
+                    json.forEach(row => {
+                        let en = row[0] ? String(row[0]).trim() : '';
+                        let cn = row[1] ? String(row[1]).trim() : '';
+                        if (en) fullDataList.push({en, cn});
+                    });
+
+                    if (fullDataList.length > 0) {
+                        renderList(fullDataList);
+                        saveToDB(fullDataList);
+                        setStatus(`✅ 加载成功 (${fullDataList.length})`);
+                    } else {
+                        alert("未找到有效数据，请检查 Excel 格式");
+                        renderEmptyState();
+                    }
+                } catch (err) {
+                    alert("解析失败: " + err.message);
+                } finally {
+                    document.getElementById('loader').style.display = 'none';
+                    input.value = '';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ================= UI 渲染 =================
+        function renderList(data) {
+            const container = document.getElementById('listContainer');
+            container.innerHTML = '';
+            
+            // 性能优化：仅渲染前300条，避免 DOM 过大卡顿
+            const displayData = data.slice(0, 300);
+            const fragment = document.createDocumentFragment();
+
+            displayData.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'word-item';
+                div.onclick = () => speak(item.en, div);
+
+                const enDiv = document.createElement('div');
+                enDiv.className = 'en-text';
+                enDiv.textContent = item.en;
+
+                const cnDiv = document.createElement('div');
+                cnDiv.className = 'cn-text';
+                cnDiv.textContent = item.cn ? `[${item.cn}]` : '';
+
+                div.appendChild(enDiv);
+                div.appendChild(cnDiv);
+                fragment.appendChild(div);
+            });
+
+            container.appendChild(fragment);
+            if(data.length > 300) setStatus('列表过长，仅显示前300条，请搜索查找');
+        }
+
+        function renderEmptyState() {
+            document.getElementById('listContainer').innerHTML = '<div class="empty-state"><p>请点击左上角导入 Excel</p></div>';
+        }
+
+        function filterList() {
+            const val = document.getElementById('searchInput').value.toLowerCase().trim();
+            if (!val) { renderList(fullDataList); return; }
+            const filtered = fullDataList.filter(i => i.en.toLowerCase().includes(val) || i.cn.includes(val));
+            renderList(filtered);
+        }
+
+        // ================= 核心发音逻辑 (增强版) =================
+        
+        function forceReset() {
+            // 停止本地
+            if(window.speechSynthesis) window.speechSynthesis.cancel();
+            // 停止网络
+            globalAudio.pause();
+            globalAudio.currentTime = 0;
+            setStatus("引擎已重置");
+        }
+
+        function testAudio() {
+            speak("System audio check.", null, true);
+        }
+
+        function speak(text, domElement, isTest = false) {
+            // 1. 生成本次播放令牌，如果再次调用 speak，token 会变，之前的异步操作会失效
+            const myToken = ++currentPlayToken;
+
+            // 2. UI 重置
+            document.querySelectorAll('.word-item').forEach(el => {
+                el.classList.remove('playing');
+                el.classList.remove('loading');
+            });
+            
+            // 3. 停止所有正在发出的声音
+            if(window.speechSynthesis) window.speechSynthesis.cancel();
+            globalAudio.pause();
+
+            // 4. 路由选择：在线 vs 本地
+            if (useOnlineTTS) {
+                speakOnline(text, domElement, isTest, myToken);
+            } else {
+                speakLocal(text, domElement, isTest, myToken);
+            }
+        }
+
+        // --- 本地 TTS 策略 ---
+        function speakLocal(text, domElement, isTest, token) {
+            const synth = window.speechSynthesis;
+            
+            // 兜底：如果突然发现没有 synth (某些奇怪的浏览器状态)
+            if (!synth) {
+                useOnlineTTS = true;
+                showOnlineBadge();
+                speakOnline(text, domElement, isTest, token);
+                return;
+            }
+
+            if (domElement) domElement.classList.add('playing');
+            if (synth.paused) synth.resume();
+
+            // 延迟一点点以规避 Android WebView 的 bug
+            setTimeout(() => {
+                if (token !== currentPlayToken) return;
+
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'en-US';
+                
+                u.onend = () => {
+                    if (domElement) domElement.classList.remove('playing');
+                    if (isTest) setStatus("✅ 本地测试完成");
+                };
+
+                u.onerror = (e) => {
+                    if (domElement) domElement.classList.remove('playing');
+                    
+                    // interrupted 是被新的播放打断，不算错
+                    if (e.error !== 'interrupted' && e.error !== 'canceled') {
+                        console.warn("Local TTS error:", e);
+                        setStatus("⚠️ 本地引擎失败，尝试网络发音...");
+                        // 自动切换到在线模式并重试
+                        useOnlineTTS = true;
+                        showOnlineBadge();
+                        speakOnline(text, domElement, isTest, token);
+                    }
+                };
+
+                synth.speak(u);
+            }, 10);
+        }
+
+        // --- 在线 TTS 策略 (简化稳健版) ---
+        function speakOnline(text, domElement, isTest, token) {
+            if (domElement) domElement.classList.add('loading'); // 显示黄色加载状态
+            if (isTest) setStatus("正在请求网络音频...");
+
+            // 清理文本，防止特殊字符导致 URL 错误
+            const cleanText = text.replace(/[\r\n]/g, ' ').trim();
+            const encodedText = encodeURIComponent(cleanText);
+
+            // 优先使用有道 (HTTPS, 速度快, 支持短句)
+            // 备用 Google (Google Translate TTS, 质量好但可能被墙)
+            const urls = [
+                `https://dict.youdao.com/dictvoice?audio=${encodedText}&type=2`,
+                `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=en&client=tw-ob`
+            ];
+
+            playUrlList(urls, 0, domElement, isTest, token);
+        }
+
+        function playUrlList(urls, index, domElement, isTest, token) {
+            if (index >= urls.length) {
+                if (token === currentPlayToken) {
+                    setStatus("❌ 网络发音失败，请检查网络");
+                    if (domElement) {
+                        domElement.classList.remove('loading');
+                        domElement.classList.remove('playing');
+                    }
+                }
+                return;
+            }
+
+            const url = urls[index];
+            globalAudio.src = url;
+            
+            // 加载开始
+            globalAudio.oncanplay = () => {
+                if (token !== currentPlayToken) return;
+                // 能够播放了，切换 UI 状态为绿色
+                if (domElement) {
+                    domElement.classList.remove('loading');
+                    domElement.classList.add('playing');
+                }
+                globalAudio.play().catch(e => {
+                    console.warn("Play error:", e);
+                    // 播放失败尝试下一个
+                    playUrlList(urls, index + 1, domElement, isTest, token);
+                });
+            };
+
+            globalAudio.onended = () => {
+                if (token !== currentPlayToken) return;
+                if (domElement) domElement.classList.remove('playing');
+                if (isTest) setStatus("✅ 网络播放完成");
+            };
+
+            globalAudio.onerror = () => {
+                if (token !== currentPlayToken) return;
+                console.warn("URL failed:", url);
+                // 当前源失败，尝试下一个源
+                playUrlList(urls, index + 1, domElement, isTest, token);
+            };
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+[app]
+title = wcv
+package.name = wcv
+package.domain = org.example.mywebapp
+source.dir = .
+source.include_exts = py,png,jpg,kv,atlas,html,css,js,json,mp3,wav,txt
+version = 0.1
+requirements = python3,kivy,android,jnius
+orientation = portrait
+fullscreen = 0
+android.permissions = INTERNET
+android.archs = arm64-v8a, armeabi-v7a
+android.allow_backup = True
+p4a.branch = master
+ios.kivy_ios_url = https://github.com/kivy/kivy-ios
+ios.kivy_ios_branch = master
+ios.ios_deploy_url = https://github.com/phonegap/ios-deploy
+ios.ios_deploy_branch = 1.10.0
+ios.codesign.allowed = false
